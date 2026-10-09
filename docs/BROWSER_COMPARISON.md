@@ -37,12 +37,12 @@ The comparison code makes no network requests. GeoTIFF.js 2.1.3 and Proj4js 2.12
 
 ## Maintenance and verification
 
-- Source: `viewer_compare/` (numerical core, TIFF adapter, export, scoped panel, narrow bridge).
-- Safe additive installation: `python comparison_addon.py --rollout`. This uses existing HTML payloads, not HDF5. It stages/validates all eight pages, checks races, backs up originals, and preserves the original page after removal of the exact marked additions. It leaves `viewer/index.html` and `explorer_template.html` unchanged.
+- Source: `web/compare/` (numerical core, TIFF adapter, export, scoped panel, narrow bridge).
+- Safe additive installation: `python src/comparison_addon.py --rollout`. This uses existing HTML payloads, not HDF5. It stages/validates all eight pages, checks races, backs up originals, and preserves the original page after removal of the exact marked additions. It leaves `viewer/index.html` and `web/explorer_template.html` unchanged.
 - Future explorer builds include comparison via `refresh_explorers.render_explorer`. There is no need to rebuild terrain or enrichment just to install this feature.
-- The zero-centre preservation fix requires the updated `layerRange` helper in `explorer_template.html` together with the comparison add-on. Add-on-only installation into an older template is insufficient; include both during the next authorized interface refresh. Scientific arrays do not need regeneration for this display fix.
+- The zero-centre preservation fix requires the updated `layerRange` helper in `web/explorer_template.html` together with the comparison add-on. Add-on-only installation into an older template is insufficient; include both during the next authorized interface refresh. Scientific arrays do not need regeneration for this display fix.
 - Restore an individual backed-up `*_explorer.html` by copying it back into `viewer/`. Retain the backup manifest and source backup; do not delete the archive.
-- Tests: `node --test viewer_compare/test_*.js` and `python -m unittest test_explorer_addon test_make_index test_refresh_explorers test_comparison_addon`.
+- Tests: `node --test tests/web/test_*.js` and `python -m unittest tests.test_explorer_addon tests.test_make_index tests.test_refresh_explorers tests.test_comparison_addon`.
 - Real-data tests read the existing Grand Mesa export and one small 50 m ASO TIFF when available; they skip when those private data assets are absent.
 
 Actual Comet browser interaction and downloads were checked on 2026-09-13 using an isolated Banner Summit preview: the two snow-depth surveys, live 3D styling, both PNG export buttons, product-switch isolation, and reload cleanup. Downloaded figures were reopened and visually inspected. See [the acceptance record](COMPARISON_BROWSER_ACCEPTANCE.md) for exact inputs, evidence, and remaining coverage. This is not an all-browser or all-site acceptance claim; GeoTIFF upload interaction, mobile behaviour, and the hosted deployment still need their own browser checks.

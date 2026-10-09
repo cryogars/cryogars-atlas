@@ -40,18 +40,18 @@ Open `viewer/index.html` when you already have a generated bundle. For an
 existing archive, build one site first:
 
 ```bash
-python make_explorer.py --site mores_creek --out-dir "path/to/archive" --viewer-dir viewer
+python src/make_explorer.py --site mores_creek --out-dir "path/to/archive" --viewer-dir viewer
 ```
 
 To generate all available sites and an entrance:
 
 ```bash
-python make_explorer.py --all --out-dir "path/to/archive" --viewer-dir viewer
+python src/make_explorer.py --all --out-dir "path/to/archive" --viewer-dir viewer
 ```
 
 `--all` currently discovers site names only from base `<site>.h5` filenames.
 If the directory contains enriched files only, use `--site <key>` for each site
-and then run `python make_index.py --viewer-dir viewer`. Enriched files are
+and then run `python src/make_index.py --viewer-dir viewer`. Enriched files are
 preferred; `--prefer-plain` selects base archives. Explicit
 `--stride` and `--terrain-stride` options change display sampling. These commands
 read full scientific arrays and can be costly, especially at Grand Mesa. Back
@@ -67,19 +67,19 @@ credentials in commands, notebooks, or release files.
 1. Discover and write a site inventory:
 
    ```bash
-   python build_hdf5.py --mode preflight --sites mores_creek --inventory "path/to/inventory.json"
+   python src/build_hdf5.py --mode preflight --sites mores_creek --inventory "path/to/inventory.json"
    ```
 
 2. Check configured authentication:
 
    ```bash
-   python build_hdf5.py --mode check-auth
+   python src/build_hdf5.py --mode check-auth
    ```
 
 3. Download, align, and write the base archive:
 
    ```bash
-   python build_hdf5.py --mode build --sites mores_creek --inventory "path/to/inventory.json" --out-dir "path/to/archive" --work-dir "path/to/scratch"
+   python src/build_hdf5.py --mode build --sites mores_creek --inventory "path/to/inventory.json" --out-dir "path/to/archive" --work-dir "path/to/scratch"
    ```
 
 `--mode build` is essential: the script defaults to `preflight`. Normal build
@@ -95,13 +95,13 @@ perform an atomic replacement. Preserve a verified copy of finished outputs,
 or use a separate candidate suffix:
 
 ```bash
-python enrich_hdf5.py --site mores_creek --out-dir "path/to/archive" --suffix .candidate
+python src/enrich_hdf5.py --site mores_creek --out-dir "path/to/archive" --suffix .candidate
 ```
 
 After reviewing that candidate and retaining a backup, the standard command is:
 
 ```bash
-python enrich_hdf5.py --site mores_creek --out-dir "path/to/archive"
+python src/enrich_hdf5.py --site mores_creek --out-dir "path/to/archive"
 ```
 
 Use `--all` in place of `--site mores_creek` to process all base site files.
@@ -120,10 +120,10 @@ Candidate files are not automatically selected by the explorer or the
 Wait until all writers are finished before opening their archives:
 
 ```bash
-python build_hdf5.py --mode verify --sites mores_creek --out-dir "path/to/archive"
-python verify_enriched.py --site mores_creek --out-dir "path/to/archive"
-python manifest.py --out-dir "path/to/archive"
-python manifest.py --out-dir "path/to/archive" --verify
+python src/build_hdf5.py --mode verify --sites mores_creek --out-dir "path/to/archive"
+python src/verify_enriched.py --site mores_creek --out-dir "path/to/archive"
+python src/manifest.py --out-dir "path/to/archive"
+python src/manifest.py --out-dir "path/to/archive" --verify
 ```
 
 The first command checks base archive invariants. The independent enrichment
@@ -156,7 +156,7 @@ public website, whose deployed bundle must be verified after upload.
 Edit `index_template.html`, preserve a copy of the existing entrance, then run:
 
 ```bash
-python make_index.py --viewer-dir viewer
+python src/make_index.py --viewer-dir viewer
 ```
 
 This reads existing `*_explorer.html` payloads and writes only `viewer/index.html`.
@@ -164,10 +164,10 @@ This reads existing `*_explorer.html` payloads and writes only `viewer/index.htm
 ### Isolated logo and notes
 
 With all eight site pages and the entrance present in `viewer/`, edit
-`ui_preview/logo_notes_addon.html`, then generate the Banner Summit preview:
+`web/logo_notes_addon.html`, then generate the Banner Summit preview:
 
 ```bash
-python ui_preview/build_logo_notes_preview.py
+python scripts/dev/build_logo_notes_preview.py
 ```
 
 Review `ui_preview/banner_summit_logo_notes_preview.html` in a browser before
@@ -178,7 +178,7 @@ The preview builder preserves the existing renderer and comparison code.
 After review, when rollout is authorized:
 
 ```bash
-python explorer_addon.py --rollout
+python src/explorer_addon.py --rollout
 ```
 
 This command backs up existing pages and replaces the isolated logo and notes
@@ -189,12 +189,12 @@ include the same notes add-on automatically.
 
 ### Shared explorer interface
 
-To install changes to `explorer_template.html` or the comparison and mask controls
-in `viewer_compare/`, use the shared interface refresh after review and rollout
+To install changes to `web/explorer_template.html` or the comparison and mask controls
+in `web/compare/`, use the shared interface refresh after review and rollout
 authorization:
 
 ```bash
-python refresh_explorers.py --viewer-dir viewer
+python src/refresh_explorers.py --viewer-dir viewer
 ```
 
 This backs up existing pages, checks replacement JavaScript with Node.js,
@@ -212,7 +212,7 @@ After validating local exports, prepare an empty destination:
 
 ```bash
 python scripts/package_public_viewer.py viewer "path/to/empty-public-bundle" --report "path/to/package-report.json"
-python -m unittest discover -s tests -p "test_package_public_viewer.py"
+python -m unittest discover -s tests -t . -p "test_package_public_viewer.py"
 ```
 
 This packages only the index and eight site pages. It removes machine-specific
@@ -229,27 +229,29 @@ distribution. Publishing prepared display pages does not require an HDF5 rebuild
 
 ## Checks
 
-Run the source suites explicitly from the repository root so discovery does not
-enter backup directories:
+Run the Python suite from the repository root:
 
 ```bash
-python -m unittest test_annotation_lineage test_audit_archive test_build_hdf5 test_build_provenance test_cleaning_metadata test_comparison_addon test_derivative_inputs test_derived_grid_metadata test_explorer_addon test_four_product_metadata test_incidence_look_side test_incidence_summary test_make_explorer test_make_index test_manifest test_mask_incidence_notes_metadata test_product_units test_projected_geometry test_refresh_explorers test_scientific_methods test_vertical_reference_metadata test_viewer_metadata_corrections
+python -m unittest discover -s tests -t .
 ```
 
-The September 21 rebuild verification passed **390 tests** in the existing
-scientific environment. These use small offline fixtures, not full research-array
-validation. The earlier September 8 preparation passed 250 tests; that is
-historical evidence rather than the current suite size.
+and the browser-code tests with Node.js:
+
+```bash
+node --test tests/web/test_*.js
+```
+
+These use small offline fixtures, not full research-array validation.
 
 With generated pages present, selected checks are:
 
 ```bash
-node ui_preview/check_index.js
-node ui_preview/check_dem_notes.js
-node ui_preview/check_workspace.js
-node ui_preview/check_cell_averaging.js
-node ui_preview/check_cell_controls.js
-node ui_preview/check_preview.js viewer/index.html
+node tests/web/check_index.js
+node tests/web/check_dem_notes.js
+node tests/web/check_workspace.js
+node tests/web/check_cell_averaging.js
+node tests/web/check_cell_controls.js
+node tests/web/check_preview.js viewer/index.html
 ```
 
 `check_workspace.js` has been repaired and checks current Info/validity behavior.
@@ -272,14 +274,12 @@ acceptance retain their own scope.
 
 Keep the archive builder/enricher, verifiers, explorer generators/templates,
 `product_guide.js`, source tests, and public documentation together. The
-following paths are runtime dependencies despite their preview-directory name:
+following paths are runtime dependencies of the viewer refresh and add-on rollout:
 
 - `assets/cryogars-logo.jpg`
-- `ui_preview/logo_notes_addon.html`
-- `ui_preview/build_logo_notes_preview.py`
-- `ui_preview/check_preview.js`
-- `ui_preview/check_logo_notes_rollout.js`
+- `web/logo_notes_addon.html`
+- `tests/web/check_preview.js`
+- `tests/web/check_logo_notes_rollout.js`
 
-Generated viewers, data archives, local launch scripts, internal handoff notes,
-logs, caches, backups, and credentials should be selected or excluded
+Generated viewers, data archives, local launch scripts, notes, logs, caches, backups, and credentials should be selected or excluded
 deliberately. See [the release checklist](release-checklist.md).

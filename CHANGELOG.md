@@ -4,14 +4,14 @@
 
 Corrected scientific archive, matching explorers, and a reproducible download.
 
-- **Enrichment 3.3.0 for all eight sites,** regenerated on Borah from the
+- **Enrichment 3.3.0 for all eight sites,** regenerated from the
   unchanged, checksum-verified base archives and swapped in by checksum-checked
   rename. Aspect now points downhill (it was reflected north–south), terrain and
   canopy derivatives use the cleaned inputs, radar geometry keeps only the
   viewed side and uses the projected heading, and every derived dataset carries
   grid and lineage metadata. Grand Mesa incidence coverage falls 19% where tracks
   cross the site. Snow depth, vegetation height, elevation and radar channels are
-  unchanged. See the [rebuild record](docs/reviews/2026-10-05-archive-rebuild-3.3.0.md).
+  unchanged.
 - **Explorers re-exported** from the corrected archives: 1,664 layers, 856
   native-block samples and all page checks passing; viewer code unchanged.
 - **`get_dataset.py`** rebuilds the archive from NASA into any folder, from a
@@ -24,8 +24,8 @@ Corrected scientific archive, matching explorers, and a reproducible download.
   phase caused by the provider's zero fill is recorded and audited.
 - **Audit:** verifies that zero-fill explanation; reports Grand Mesa's measured
   SWE/density rasters as a known omission rather than a silent gap.
-- **Environment:** `pandas` added after a clean install on Borah. MIT `LICENSE`
-  and `CITATION.cff` added. Slurm jobs for the rebuild are in `scripts/borah/`.
+- **Environment:** `pandas` added after a clean install. MIT `LICENSE` and
+  `CITATION.cff` added.
 
 ## 2026-09-22 — color editor responsiveness
 

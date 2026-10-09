@@ -40,10 +40,8 @@
 /keep_awake.py
 /status.py
 
-# Keep runtime add-on/check sources; omit generated preview variants
-/ui_preview/*explorer.html
-/ui_preview/*preview.html
-/ui_preview/*manifest.json
+# Generated development previews (scripts/dev/ writes here)
+/ui_preview/
 
 # Credentials and local configuration
 .env

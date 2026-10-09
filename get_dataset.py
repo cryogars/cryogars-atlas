@@ -42,7 +42,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "src"))
 
 SITES = ["cameron_pass", "dry_creek", "reynolds_creek", "little_cottonwood",
          "fraser", "mores_creek", "banner_summit", "grand_mesa"]

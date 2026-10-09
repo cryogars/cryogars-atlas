@@ -138,8 +138,6 @@ dataset; they are not byte-identical, because HDF5 records creation times and
 software versions.
 
 Grand Mesa alone is about 220 GB; `--plan` reports the space each site needs.
-The CryoGARS lab's verified copy is on Boise State's Borah cluster at
-`/bsushare/hpmarshall-shared/SNOWEX/LIDAR`, with its manifests.
 
 ### What is inside
 
@@ -200,14 +198,14 @@ and building a viewer from an existing archive.
 ## Status
 
 **v1.0.05, released 2026-10-08.** All eight sites were re-enriched to version
-3.3.0 on Borah from the unchanged, checksum-verified base archives: aspect now
+3.3.0 from the unchanged, checksum-verified base archives: aspect now
 points downhill (it was reflected north–south), terrain and canopy derivatives
 use the cleaned inputs, radar viewing geometry uses the projected flight
 heading, and every derived dataset carries its grid and lineage metadata. The
 explorers were exported from the corrected archives. Only aspect, the two
 incidence layers and a few canopy/slope edge cells changed; snow depth,
 vegetation height, elevation and all radar channels are unchanged. See the
-[rebuild record](docs/reviews/2026-10-05-archive-rebuild-3.3.0.md).
+[release notes](CHANGELOG.md).
 
 ### Known limitations
 
@@ -221,7 +219,7 @@ vegetation height, elevation and all radar channels are unchanged. See the
 | Incoming ASO data | Deferred; georeferencing, date, duplicate and SWE-lineage issues must be resolved before ingestion. |
 
 The full list, with the reasoning behind each, is in the
-[design document](docs/design.md#accepted-limitations-for-v1005).
+[technical reference](docs/technical-reference.md#accepted-limitations-for-v1005).
 
 ### Longer-term research
 
@@ -238,6 +236,7 @@ validated retrieval model is not included.
 
 [Documentation index](docs/README.md) ·
 [Design document](docs/design.md) ·
+[Technical reference](docs/technical-reference.md) ·
 [Comparison guide](docs/BROWSER_COMPARISON.md) ·
 [Scientific notes](docs/scientific-notes.md) ·
 [Data sources](docs/data-sources.md) ·

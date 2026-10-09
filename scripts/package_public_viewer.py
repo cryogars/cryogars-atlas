@@ -16,10 +16,10 @@ SITES = ("banner_summit", "cameron_pass", "dry_creek", "fraser", "grand_mesa",
          "little_cottonwood", "mores_creek", "reynolds_creek")
 PAGES = ("index.html",) + tuple(site + "_explorer.html" for site in SITES)
 SCRIPT = re.compile(r'(<script\b[^>]*>)([\s\S]*?)(</script>)', re.IGNORECASE)
-# Cluster roots (Boise State Borah) count as local too: pages exported there
-# record home, scratch and shared-storage paths in their lineage.
-LOCAL_PATH = re.compile(r'^(?:[A-Za-z]:[/\\]|\\\\|/(?:home|Users|mnt|tmp|opt|bsuhome|bsuscratch|bsushare)/|~/|file:)', re.I)
-LOCAL_IN_TEXT = re.compile(r'(?<![\w:])(?:[A-Za-z]:[\\/]|/(?:home|Users|bsuhome|bsuscratch|bsushare)/|file:///)', re.I)
+# Cluster roots count as local too: pages exported on a cluster record home,
+# scratch and shared-storage paths (e.g. /home, /xyzscratch, /labshare) in their lineage.
+LOCAL_PATH = re.compile(r'^(?:[A-Za-z]:[/\\]|\\\\|/(?:Users|mnt|tmp|opt|[a-z]*(?:home|scratch|share))/|~/|file:)', re.I)
+LOCAL_IN_TEXT = re.compile(r'(?<![\w:])(?:[A-Za-z]:[\\/]|/(?:Users|[a-z]*(?:home|scratch|share))/|file:///)', re.I)
 LINEAGE_KEYS = {"build_provenance", "metadata_correction_provenance"}
 #: Archive attributes holding lineage as JSON text. Enrichment 3.3.0 writes
 #: these on the file and on datasets; the explorer shows them in its tree.

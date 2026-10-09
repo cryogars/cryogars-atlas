@@ -1,12 +1,13 @@
 # Documentation
 
-Start with the [design document](design.md), a review draft connecting the sources,
-processing, archives and screen calculations. Its status table distinguishes the
-current source from the historical scientific archives and rebuilt local explorers.
+Start with the [design document](design.md) ([Word version](design.docx)): the
+sites, the pipeline and the full HDF5 schema. The [technical reference](technical-reference.md)
+connects the sources, processing, archives and screen calculations in detail.
 
 | Read this | For |
 | --- | --- |
-| [Design document](design.md) | Architecture, all eight sites, 15 displayed product families and their mathematics |
+| [Design document](design.md) | Sites, data volume, pipeline steps, grid and resampling choices, HDF5 schema |
+| [Technical reference](technical-reference.md) | All eight sites, 15 displayed product families, their mathematics, validation and accepted limitations |
 | [Scientific notes](scientific-notes.md) | Detailed processing choices, display behavior and unresolved scientific limitations |
 | [Data sources](data-sources.md) | Provider collections, original dataset references and citation guidance |
 | [Repository layout](repository-layout.md) | Where source, generated files, tests and local evidence belong |
@@ -28,6 +29,6 @@ scope of earlier checks.
 
 The development workspace also contains a local issue register and a detailed
 product-trace dossier. They are intentionally excluded from source distribution.
-The design document summarizes the relevant methods without requiring those local
+The technical reference summarizes the relevant methods without requiring those local
 files. A public, exhaustive granule/date/channel appendix remains to be curated;
-the current design tables enumerate product families and site coverage.
+the technical reference tables enumerate product families and site coverage.

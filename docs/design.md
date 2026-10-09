@@ -1,366 +1,184 @@
-# SnowEx Field Atlas design
+# SnowEx Field Atlas: HDF5 storage design
 
-**v1.0.05 · updated 2026-10-05.** This document connects the data sources to the
-stored products and the numbers and colours in the explorer. It describes the
-enrichment 3.3.0 archives rebuilt on Borah on 2026-09-28 and the explorers
-exported from them. It is not a claim that all historical processing can be
-reproduced from today's source: the base archives predate forward provenance.
+*Also available as a Word document: [design.docx](design.docx).*
 
-## 1. Scope and artifact status
+## 1. Goal
 
-The project aligns NASA SnowEx LiDAR and UAVSAR observations for inspection,
-comparison and later analysis. It provides per-site HDF5 archives and a browser
-atlas. It does not currently produce a validated radar snow-depth/SWE retrieval,
-trained model, uncertainty map or NISAR product.
+Build a per-site HDF5 archive that puts NASA SnowEx LiDAR products (DEM, snow
+depth, vegetation height) and the matching NASA/JPL UAVSAR L-band radar products
+(interferometry and amplitude) pixel-aligned on one common 3 m grid per site, as
+the training and evaluation data for snow-depth models and, later, snow water
+equivalent (SWE) retrieval. Released as v1.0.05: a base file (product 0.1.0) and
+an enriched file (enrichment 3.3.0) per site.
 
-| Artifact | Current state |
+## 2. Sites and data inventory
+
+8 sites have overlapping LiDAR + UAVSAR coverage, found by intersecting each
+LiDAR granule's real footprint polygon with UAVSAR's catalog — not by matching
+site names to campaign names, which turned out to be unreliable. A UAVSAR pair
+counts as a match when it overlaps the footprint and comes within 5 days of the
+LiDAR survey.
+
+| Site | State | LIDAR product(s) | UAVSAR match | Notes |
+| --- | --- | --- | --- | --- |
+| Banner Summit | ID | DEM, SD (2 dates), VH (2 dates) | yes, 11 acquisitions | Shares flight lines w/ Dry Creek, Mores Creek |
+| Dry Creek | ID | DEM, SD, VH | yes, 2 acquisitions | Shares flight lines w/ Banner Summit |
+| Mores Creek | ID | DEM, SD (2 dates), VH (2 dates) | yes, 10 acquisitions | Shares flight lines w/ Banner Summit |
+| Fraser | CO | DEM, SD (2 dates), VH (2 dates) | yes, 5 acquisitions | |
+| Cameron Pass | CO | DEM, SD, VH | yes, 5 acquisitions | |
+| Little Cottonwood Cyn | UT | DEM, SD, VH | yes, 6 acquisitions | |
+| Grand Mesa | CO | DEM, SD (6 dates), VH (2 dates) | yes, 27 acquisitions | DEM is a 2016 lidar snow-off DTM (1 m); SD from 5 ASO surveys (2017) + SnowEx 2020 |
+| Reynolds Creek | ID | DEM, VH | yes, 1 acquisition | DEM is the 2014 RCEW lidar DEM (1 m); no snow-depth survey exists |
+
+### 2.1 Data volume (final archive)
+
+Sizes of the released v1.0.05 files. The archive is larger than the downloaded
+radar products (about 172 GB before clipping) because every layer is stored on
+the 3 m grid, finer than UAVSAR's native pixels, and Grand Mesa's grid alone
+holds 286 million cells.
+
+| Site | Base file (.h5) | Enriched file (.enriched.h5) |
+| --- | ---: | ---: |
+| Banner Summit | 20.32 GB | 18.40 GB |
+| Mores Creek | 4.61 GB | 4.13 GB |
+| Fraser | 3.57 GB | 3.25 GB |
+| Cameron Pass | 1.30 GB | 1.18 GB |
+| Little Cottonwood Cyn | 3.32 GB | 2.87 GB |
+| Dry Creek | 1.16 GB | 1.04 GB |
+| Grand Mesa | 107.94 GB | 114.03 GB |
+| Reynolds Creek | 1.08 GB | 0.95 GB |
+| **Total (16 files, 289.15 GB)** | **143.31 GB** | **145.84 GB** |
+
+## 3. Pipeline design
+
+### 3.0 What the main script does, end to end
+
+| Step | Action |
 | --- | --- |
-| Base archives | Product version 0.1.0, unchanged since 2026-08-29. Byte-verified on Borah against the 2026-08-31 manifest (Slurm job 3280352). |
-| Enriched archives | Enrichment 3.3.0, regenerated on Borah 2026-09-28 from the unchanged base files: corrected aspect, cleaned-input derivatives, corrected viewing geometry and `derived_metadata_version=1.0` metadata. They replace the 3.0.0 enriched files, which are not retained. |
-| Archive location | `/bsushare/hpmarshall-shared/SNOWEX/LIDAR` on Boise State's Borah cluster: 16 files (8 base, 8 enriched) with `MANIFEST.json` and `MANIFEST.sha256`. |
-| Explorers | Eight pages exported from the 3.3.0 archives, 1,664 layers. Remains a research preview. |
-| Release label | v1.0.05 is the project label, separate from the product and enrichment algorithm versions. |
+| 1. Plan | Read the frozen product inventory and the LIDAR/UAVSAR match list; group by unique UAVSAR product so a shared flight is downloaded once, not once per site. |
+| 2. Grid + LIDAR | Derive the site's common grid from its reference DEM (3.2); read each DEM/SD/VH product, resample it onto the grid (3.4) and write it into the site's .h5. |
+| 3. Fetch UAVSAR | Download each unique product once, by its recorded product URL (found via footprint search — no campaign names). |
+| 4. Reproject + clip | Resample onto the common grid of every site sharing that product (3.2, 3.4), reading only the site's extent plus a 500 m buffer. |
+| 5. Write | Stream the clipped, aligned arrays straight into each site's .h5 — no intermediate files on disk. |
+| 6. Clean up | Delete the raw UAVSAR download once every site needing it has been written. |
+| 7. Finalize | Write `identification/` and `matches/`; verify every array's shape + transform matches the site's common grid before marking the file complete. |
+| 8. Enrich | Write `<site>.enriched.h5` (never edit in place): clean the layers, regroup radar by acquisition, add slope, aspect, canopy fraction, coherence masks and incidence angles (4). |
+| 9. Verify | Re-check the enrichment from the stored values, audit every file independently, and write SHA-256 manifests. |
 
-The [3.3.0 rebuild record](reviews/2026-10-05-archive-rebuild-3.3.0.md)
-documents the regeneration, its checks and what changed. Earlier records —
-the [September 21 display rebuild](reviews/2026-09-21-explorer-rebuild.md) and
-[September 22 publication](reviews/2026-09-22-public-viewer-update.md) — describe
-the 3.0.0-era explorers.
+### 3.1 One download per flight, shared across sites
 
-## 2. Sites and source selection
+- Banner Summit, Dry Creek and Mores Creek are covered by the same UAVSAR flight
+  lines (Lowman lines 05208 and 23205).
+- Each unique product is downloaded once, clipped separately for every
+  overlapping site, then the raw file is deleted.
 
-All archive grids have 3 m spacing. The reference raster supplies each site's
-projected CRS; these are not interchangeable coordinate systems. Counts below
-describe the retained current snapshot, not every available provider product.
-Fine spacing applies to exported terrain/LiDAR; radar colours are coarser.
+### 3.2 Common grid per site
 
-| Site | EPSG | SD dates | VH dates | Radar groups | Layers | Fine / radar export m |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Banner Summit | 6340 | 2 | 2 | 11 | 329 | 24 / 96 |
-| Cameron Pass | 6342 | 1 | 1 | 5 | 149 | 12 / 48 |
-| Dry Creek | 6340 | 1 | 1 | 2 | 64 | 15 / 60 |
-| Fraser | 6342 | 2 | 2 | 5 | 159 | 15 / 60 |
-| Grand Mesa | 32612 | 6 | 2 | 27 | 446 | 72 / 288 |
-| Little Cottonwood Canyon | 6341 | 1 | 1 | 6 | 177 | 15 / 60 |
-| Mores Creek | 6340 | 2 | 2 | 10 | 305 | 12 / 48 |
-| Reynolds Creek | 26911 | 0 | 1 | 1 | 35 | 18 / 72 |
-| Total | — | 15 | 12 | 67 | 1,664 | — |
+- Every array in a site's file (LIDAR and UAVSAR alike) shares one CRS, one
+  affine transform, one pixel shape. The CRS, 3 m pixel size and pixel alignment
+  come from the site's reference LiDAR DEM; the grid extent is where that DEM and
+  the site's science data overlap.
+- Stronger than “same projection”: the same row and column are the same ground
+  location in every layer, checked programmatically on every array before a file
+  is marked complete.
 
-A radar group is a site/date-pair/flight-line combination, not an independent
-aircraft pass. Grand Mesa contains two campaigns over overlapping ground.
-The 16 base/enriched files total 289.15 GB decimal (269.29 GiB); the viewer
-contains much smaller derived display arrays.
+Grand Mesa has no QSI DEM. Its reference is the 2016 lidar-derived snow-off DTM
+from the SnowEx HRSI collection (1 m, resampled to 3 m, EPSG:32612) — older than
+the 2017 and 2020 snow surveys it supports, and recorded as such.
 
-### LiDAR source inventory
+Reynolds Creek has no snow-depth survey in the SnowEx collections. Its reference
+is the 2014 Reynolds Creek Experimental Watershed lidar DEM (1 m, resampled to
+3 m, EPSG:26911), so the site carries terrain, vegetation and radar but no
+snow-depth labels.
 
-The six QSI sites use Version 1 `SNEX20_QSI_DEM_3m`, `SNEX20_QSI_SD_3m` and
-`SNEX20_QSI_VH_3m`. Their filename pattern is
-`SNEX20_QSI_<DEM|SD|VH>_3M_<site token>_<begin>_<end>.tif`.
-The intervals below are the recorded source tokens, not inferred single-pass times.
+### 3.3 Resolution
 
-| Site / token | DEM interval | SD and VH intervals |
-| --- | --- | --- |
-| Banner Summit / USIDBS | 2021-09-17 | 2020-02-18–19; 2021-03-15 |
-| Cameron Pass / USCOCP | 2021-09-18 | 2021-03-19 |
-| Dry Creek / USIDDC | 2021-09-16 | 2020-02-19 |
-| Fraser / USCOFR | 2021-09-18–21 | 2020-02-11; 2021-03-19–20 |
-| Little Cottonwood / USUTLC | 2021-09-21 | 2021-03-18 |
-| Mores Creek / USIDMC | 2021-09-17 | 2020-02-09; 2021-03-15 |
+- LIDAR: QSI and ASO products are published at 3 m; Grand Mesa's DTM and Reynolds
+  Creek's DEM are 1 m and are resampled to 3 m. UAVSAR: about 4.45 m × 6.18 m on
+  the ground (non-square), recorded per product.
+- The 3 m LIDAR grid is the common grid; UAVSAR is upsampled onto it. This
+  resamples a coarser measurement onto a finer bookkeeping grid — it does not
+  invent new detail — and UAVSAR's true resolution is stored as
+  `uavsar_native_resolution_m` so it is never mistaken for a native 3 m
+  measurement.
 
-Grand Mesa uses `SNEX_HRSI_SD_DEM_CO_GM_DTM_1m_V01.0.tif`, the collection's
-**LiDAR-derived snow-off reference DTM**, resampled to 3 m. Its six snow-depth
-products comprise five ASO 3 m surveys (2017-02-08, 16, 20, 21 and 25) and
-`SNEX20_GM_Lidar_SD_20200201_20200202_v01.0.tif`. The latter's saved catalog
-date is February 1 while its filename spans February 1–2; that discrepancy and
-its exact native spacing remain unresolved. QSI VH intervals are 2020-02-01–02
-and 2020-02-13. They are later than the 2017 snow observations.
+Upsampling was kept over downsampling LIDAR to the radar grid: it preserves the
+LIDAR labels at full resolution, and models can still average to coarser blocks
+when training.
 
-Reynolds Creek uses the ORNL `RCEW_DEM_1m.tif` reference (2014-08-23–31),
-resampled to 3 m, and QSI VH from 2020-02-18–20. There is no snow-depth layer.
-Collection identifiers and provider references are in [Data sources](data-sources.md).
-Incoming ASO packages, in-situ observations, SWE/density and radar projection DEMs
-are outside the current displayed product inventory.
+### 3.4 Resampling method
 
-### Radar product availability at every site
+- `.int` (complex interferogram): nearest-neighbor, to avoid averaging across a
+  2π wrap boundary.
+- `.unw`, `.cor`, amplitude and all LIDAR variables: bilinear.
 
-Amplitude 1/2 come from `AMPLITUDE_GRD`; complex interferograms, coherence and
-unwrapped phase come from `INTERFEROMETRY_GRD`, distributed through ASF.
-Annotations retain pass dates, flight line, polarization and available geometry.
-The exact product IDs and members belong to each layer's source metadata.
+### 3.5 Naming, documentation, and NISAR alignment
 
-| Site | Amp1 / Amp2 each | Magnitude / wrapped / coherence / mask each | Unwrapped shown / stored | Flat / local incidence each |
-| --- | ---: | ---: | ---: | ---: |
-| Banner Summit | 44 | 44 | 34 / 40 | 11 |
-| Cameron Pass | 20 | 20 | 13 / 16 | 5 |
-| Dry Creek | 8 | 8 | 6 / 8 | 2 |
-| Fraser | 20 | 20 | 20 / 20 | 5 |
-| Grand Mesa | 57 | 53 | 53 / 53 | 27 |
-| Little Cottonwood | 24 | 24 | 15 / 24 | 6 |
-| Mores Creek | 40 | 40 | 36 / 36 | 10 |
-| Reynolds Creek | 4 | 4 | 4 / 4 | 1 |
+- In the base file, UAVSAR groups are named by site, source flight line and
+  dates, not JPL's opaque product ID:
 
-Every site has one DEM, slope and aspect. Canopy products match the site's VH
-dates. Thus the site tables and product contracts below cover all 15 displayed
-families. A complete public per-granule/channel appendix is still needed; these
-tables do not substitute for exact retained source identities.
+  ```text
+  BANNERSUMMIT_CUTFROMLOWMAN23205_20200131_20200213
+  ```
 
-## 3. Acquisition, alignment and storage
+- The enriched file regroups radar by acquisition —
+  `UAVSAR/<date1>_<date2>/<flight line>/` — with amplitude and interferometry
+  together, since they come from the same pair of passes; the base group name is
+  kept as `original_group_name`.
+- Original JPL product ID and ASF file ID kept as attributes for traceability,
+  not used as group names.
+- Every group and array carries a plain-English `description` attribute plus
+  units, grid and source lineage — readable without outside context or SAR
+  background.
+- The overall structure (science data under `science/`, file-level metadata in a
+  separate `identification/` group) follows the layout NASA uses in NISAR HDF5
+  products.
+
+## 4. Full HDF5 schema (v1.0.05)
+
+Shown for Banner Summit's enriched file — 2 SD dates, 2 VH dates, DEM, derived
+layers and 11 UAVSAR acquisitions, on flight lines shared with Dry Creek and
+Mores Creek. The base file (`banner_summit.h5`) holds the same LIDAR arrays and
+stores radar by product type (`INTERFEROMETRY_GRD/`, `AMPLITUDE_GRD/`,
+`DEM_TIFF/`). Arrows explain what each item actually is.
 
 ```text
-Provider catalogs and downloaded rasters/annotations
-  → discovery inventory and spatial/temporal selection
-  → common-grid alignment and builder cleaning
-  → <site>.h5
-  → enrichment cleaning, grouping and derivation
-  → <site>.enriched.h5
-  → display block reduction and quantization
-  → embedded HTML payload → browser rendering and comparison
+banner_summit.enriched.h5
+├─ identification/   → file-level metadata, no science data — the “label on the box”
+│   common_crs_epsg, common_crs_wkt   → the shared map projection every array in this file uses
+│   common_grid_transform, common_grid_shape, common_grid_resolution_m   → the exact 3 m pixel grid (origin, spacing, size) everything is resampled onto
+│   reference_product, reference_filename, grid_extent_rule   → which lidar DEM defines the grid, and how its extent was chosen
+│   uavsar_native_resolution_m, resampling_note   → UAVSAR's true original pixel size, and how/why it was resampled
+│   site_name, site_key, state, product_version, enrichment_version, created_date   → basic identifying info about this file
+│
+├─ science/   → the measured and derived data, split into LIDAR/ and UAVSAR/
+│   ├─ LIDAR/   → data from the airborne laser surveys
+│   │   ├─ DEM/   → bare-earth elevation — the ground surface with snow and plants stripped away
+│   │   │     grids/elevation   → the actual elevation values (meters), plus the source file and survey date
+│   │   ├─ SD/   → snow depth — how deep the snow was, in meters (snow-on survey minus snow-off survey)
+│   │   │     20200218/snow_depth,  20210315/snow_depth   → one snow depth map per survey date
+│   │   ├─ VH/   → vegetation height — how tall the trees/brush are
+│   │   │     20200218/veg_height, 20210315/veg_height   → one vegetation height map per survey date
+│   │   └─ DERIVED/   → computed from the layers above
+│   │         slope, aspect   → terrain steepness and downhill direction, in degrees
+│   │         forest_cover_fraction_20200218, _20210315   → share of nearby cells with vegetation ≥ 2 m
+│   │
+│   └─ UAVSAR/   → data from the airplane-mounted radar — clipped to this site, resampled onto the LIDAR grid
+│         20200131_20200213/LOWMAN23205/   → one acquisition: the Lowman flight line, comparing Jan 31 to Feb 13, 2020
+│           attrs: original_product_id, original_group_name, acquisition_dates,   → traceability: JPL's product ID, the base-file group name and the two real flight dates
+│                  radar_wavelength_cm, radar_look_direction, platform_altitude_m   → radar and flight geometry from JPL's annotation file
+│           HH/  amp1, amp2, int, unw, cor, coherence_mask   → horizontal-send / horizontal-receive antenna combination — 6 arrays (below)
+│                • amp1, amp2 = amplitude   → radar brightness on each pass — how much energy bounced back
+│                • int = raw interferogram   → the radar phase difference between the passes — a complex number, wraps every 360°
+│                • unw = unwrapped phase   → the int value “unrolled” into a continuous number — the usable surface-change signal
+│                • cor = coherence   → 0 to 1, how trustworthy the phase measurement is at that pixel (1 = reliable)
+│                • coherence_mask   → 1 where coherence ≥ 0.30, 0 below, 255 where missing
+│           HV/, VH/, VV/  (same 6)   → the other send/receive combinations, where the flight recorded them
+│           GEOMETRY/  incidence_angle_flat, local_incidence_angle   → the angle the radar meets the ground, ignoring and including the slope
+│
+└─ matches/   → a table recording which LIDAR date was paired with which UAVSAR acquisition, how many days apart, and whether it counted as a match
+    lidar_product_type, lidar_date, lidar_filename, uavsar_level, uavsar_dates, uavsar_flight_id, gap_days, group_name, verdict
 ```
 
-[The builder](../build_hdf5.py) searches NASA CMR and ASF by the configured
-site/product footprint. LiDAR–radar matching requires footprint intersection
-and a minimum survey-endpoint/radar-endpoint gap of at most five days. Nearness
-to one radar pass does not establish nearness to both. Timeline survey markers
-identify survey starts; match tables preserve the endpoint-based gap.
-
-The DEM reference determines the 3 m projected grid and grid phase. Current
-extent selection intersects the DEM and science extent; the 500 m source-read
-buffer is not an empty border in the stored grid. For affine coefficients
-`[a,b,c,d,e,f]`, the center of row r, column k is:
-
-```text
-x = c + a*(k+0.5) + b*(r+0.5)
-y = f + d*(k+0.5) + e*(r+0.5)
-```
-
-Scalar rasters use the configured product resampler (bilinear for the displayed
-continuous imports); complex interferograms use nearest-neighbour alignment.
-Resampling onto 3 m cells does not create native 3 m radar information.
-The base archive already contains aligned, processed values; it is not untouched
-sensor data. Compression preserves these stored values without further averaging.
-
-Builder cleaning removes configured sentinels/range failures, screens configured
-spikes, then optionally fills missing cells from at least three finite cardinal
-neighbours, by default for two passes. Complex interferograms bypass this scalar
-cleaner. Enrichment applies further range and connected-component screens. Small
-LiDAR components use four-neighbour connectivity and a 100-cell cutoff, with a
-sole component retained. Historical processing counts are incomplete; finite
-values can be measured, interpolated or derived.
-
-For each radar polarization, swath support is the intersection of finite,
-nonzero values in the available amplitude1/amplitude2/coherence inputs. Matching
-arrays are masked to that support; exact-zero unwrapped phase is additionally
-removed where the swath rule applies. That convention can remove true zero phase.
-See [cleaning details and limitations](scientific-notes.md#enrichment-and-cleaning).
-
-## 4. Product contracts and processing mathematics
-
-Current derivations are implemented in [enrich_hdf5.py](../enrich_hdf5.py).
-The 3.3.0 archives derive every product below from the cleaned DEM and VH
-layers stored in the same enriched file, and record that input stage. Floating missing values
-are NaN; native coherence masks use 255, distinct from valid 0 and 1.
-
-| Family (displayed count) | Source / stored meaning and units | Computation and display reduction |
-| --- | --- | --- |
-| Elevation (8) | Selected provider terrain, metres; source-specific height reference | Imported/aligned/cleaned. Finite block mean; separate 16-bit terrain and 8-bit colour copies. |
-| Snow depth (15) | Imported provider depth, metres; QSI, ASO 2017 and Grand Mesa 2020 methods differ | Not computed by subtracting the displayed DEM. Enrichment clips `[-0.25,0)` m to zero, rejects below −0.25 or above 15 m, and screens components. Finite block mean. |
-| Vegetation height (12) | Imported QSI vegetation height, metres | Not recomputed from displayed elevation. Finite block mean; survey/surface epoch matters. |
-| Canopy fraction (12) | VH-based proxy, dimensionless | Count finite VH≥2 m / count finite VH in centered 11×11 cells (33×33 m). Truncated edge window; empty window missing; missing center may still have a fraction. Finite block mean of fractions. |
-| Slope (8) | Derived DEM slope, degrees | `atan(hypot(gx,gy))` converted to degrees. Display averages fine-grid slopes, not slope recalculated from a coarse DEM. |
-| Aspect (8) | Derived downhill grid bearing, degrees clockwise from grid north | `degrees(atan2(-gx,-gy)) mod 360`; flat/missing is undefined. Checked against an independent DEM-gradient bearing on about 1 million steep Cameron Pass cells: median difference 1.0° (the 3.0.0 archive's reflected aspect differed by 68°). Export uses circular means. |
-| Amplitude 1 (217) | Provider linear amplitude for pass 1 | Imported/aligned/cleaned/masked; finite mean, then P2–P98 packing. No local logarithm or dB conversion. |
-| Amplitude 2 (217) | Provider linear amplitude for pass 2 | Same operations, distinct annotated pass. |
-| Interferogram magnitude (213) | Magnitude of imported complex I; recorded magnitude units (cached annotations identify linear power) | `mean(abs(I))` over finite complex inputs, then P2–P98 packing; not `abs(mean(I))`. |
-| Wrapped phase (213) | Phase of imported complex I, radians | `arg(mean(I))`; source magnitudes weight the resulting direction. Near cancellation can destabilize phase. Browser angular interpolation is a later operation. |
-| Unwrapped phase (181) | Provider-unwrapped phase, radians | Imported, not unwrapped locally. Swath/zero screening as above; finite scalar block mean. Reference/settings are not fully recorded. |
-| Coherence (213) | Imported dimensionless provider estimate | Aligned/cleaned/masked, then finite mean. A display mean is not a new coherence estimate from complex observations. |
-| Coherence mask (213) | `1` for finite cleaned coherence≥0.30; `0` below; `255` missing | Export mean of valid 0/1 cells gives passing fraction. Browser Average/0–1 uses that fraction and an adjustable display cutoff. |
-| Flat incidence (67) | Approximate angle from vertical, degrees | `acos(lz)`, where l is the unit ground-to-platform vector. Uses ground elevation but omits surface tilt. Finite scalar block mean. |
-| Local incidence (67) | Approximate angle from upward surface normal, degrees | `acos(clamp(n·l,-1,1))`. Same approximate platform geometry; finite scalar block mean. |
-
-For a north-up DEM neighborhood `a b c / d z f / g h i` and spacing s:
-
-```text
-gx = ((c+2*f+i) - (a+2*d+g)) / (8*s)
-gy = ((a+2*b+c) - (g+2*h+i)) / (8*s)
-n  = (-gx,-gy,1) / sqrt(gx²+gy²+1)
-```
-
-Horn slope/aspect repeats outermost cells and propagates missing neighbours.
-Aspect is undefined when `hypot(gx,gy)<1e-9`. Incidence instead substitutes the
-finite DEM mean for missing normal-stencil neighbours and masks missing centers.
-
-The corrected incidence source approximates a straight track through the peg,
-converts geographic heading to grid bearing using projected geodesic endpoints,
-and places the platform at the nearest track point at constant average altitude.
-It retains only the declared look side. Compared with 3.0.0, median display
-changes were 0.03–0.97° for flat incidence and 0.14–0.96° for local incidence.
-Aircraft altitude reference, time-resolved navigation and terrain/aircraft height
-compatibility remain unverified. Six QSI terrain references are NAVD88/GEOID12b;
-Grand Mesa is WGS84 ellipsoidal; Reynolds' exact reference remains unresolved.
-No vertical conversion, terrain-occlusion model or physical accuracy bound is
-established. Incidence≥90° is an angle condition, not proof of radar shadow.
-
-## 5. Exported values to screen colours
-
-[make_explorer.py](../make_explorer.py) reads the chosen archive without changing
-it. Only science arrays matching the site's common-grid shape become colour
-layers. Complete blocks are retained; partial bottom/right archive blocks are
-cropped. For finite scalar inputs, a block is `sum(v)/count(v)`; no finite inputs
-means missing. One finite input can make a whole display block finite.
-Aspect instead averages `(cos θ,sin θ)` and recovers `atan2`; resultant magnitude
-≤1e-12 is missing. Complex magnitude and phase use their table-specific reducers.
-
-There are 1,471 stored scientific rasters plus 213 additional complex views,
-minus 20 omitted unwrapped rasters: 1,664 display layers. Nineteen omitted arrays
-have no valid stored values. Cameron Pass's remaining omitted raster has 124 valid
-cells entirely in a discarded bottom strip; the approved cropping rule remains.
-
-For b-bit packing, code 0 means missing; finite values have:
-
-```text
-Q = 1 + round_to_even(clamp((v-lo)/span,0,1) * (2^b-2))
-span = hi-lo when positive, otherwise 1
-decoded = lo + (Q-1)/(2^b-2) * (hi-lo)
-```
-
-Terrain uses b=16; colour layers use b=8 (254 intervals). Ordinary layers use
-finite min/max bounds; amplitude/magnitude use finite block P2/P98, falling back
-to min/max when those coincide. Clipped tails cannot be recovered by a palette
-change. Probes read approximate decoded values, not native archive values.
-
-The [renderer](../explorer_template.html) maps exported cell centers into the
-terrain grid using origins and signed spacing, leaving unsupported positions
-missing. Detail level L uses terrain spacing×2^L and
-`ceil(W/2^L) × ceil(H/2^L)` positions.
-
-| Control | Actual mathematics |
-| --- | --- |
-| Smooth | Interpolates finite values across terrain vertices with finite-support weighting. Aspect/wrapped phase interpolate unit directions; cancellation is missing. Palette mapping and terrain illumination follow. |
-| Cells | At current Detail spacing, averages decoded exported values by overlap area: `sum(Ai*vi)/sum(Ai)` over finite inputs. Blocks start at terrain origin; final partial blocks clip to its retained rectangle. Each block gets one palette colour without neighbour blending or terrain shading. |
-| Angular Cells | Area-weighted mean unit directions; cancelling directions are missing. Unwrapped phase remains scalar. |
-| Mask Cells | Average exported passing fractions before applying the selected cutoff once. This is not a pooled native passing fraction because original block valid-count denominators are unavailable. |
-| Overlay | Selected opacity blends primary and overlay colours. Cells still respects this blend. |
-| Palette/stretch | Maps decoded values to colour; does not change archive values or restore export clipping. Percentile labels describe stretches, not retained observations. |
-
-Palette, reverse and contrast edits update shader uniforms and the legend while
-retaining the uploaded values and Cells textures. Layer selection, Detail changes
-and mask classification still refresh the affected data. Redraw requests are
-coalesced into one animation frame, with no repeated terrain draws when the scene
-is unchanged or hidden. The FPS indicator marks inactivity as idle.
-
-At 192 m Detail, Cells therefore displays one colour per 192 m block, even if
-its source display array is 24 m. Auto changes the spacing with resolved detail.
-For temporary categorical results, binary Cells uses overlap-weighted majority
-(ties→1); signed −1/0/+1 transitions use a unique weighted mode (ties→missing).
-
-**Valid stored** is finite stored cells / all archive cells at archive spacing.
-**Valid display** in Details is finite exported cells / all exported cells.
-**Valid shown** follows the current rendering grid: finite sampled values in
-Smooth or finite block aggregates in Cells, with a finite corresponding terrain
-sample, divided by all rendering positions. Zero is valid. These are whole-grid
-counts, not visible screen pixels or viewport coverage; camera detail changes can
-alter Valid shown while panning at fixed detail does not.
-
-The [comparison module](../viewer_compare/) aligns B to A's exported analysis
-grid and uses shared finite support for B−A. Angular differences wrap to their
-shortest signed interval; temporary comparisons have no stored archive count.
-Figure export uses the analysis grid rather than a terrain screenshot. See the
-[comparison contract](BROWSER_COMPARISON.md) for import rules and statistics.
-
-## 6. Schema and reproducibility boundaries
-
-```text
-identification/                    site, CRS, transform, shape, versions
-matches/                           recorded LiDAR–radar matches
-science/LIDAR/DEM/grids/elevation
-science/LIDAR/SD/<survey>/snow_depth
-science/LIDAR/VH/<survey>/veg_height
-science/LIDAR/DERIVED/              slope, aspect, canopy fractions
-science/UAVSAR/<date1>_<date2>/<flight line>/
-    <polarization>/                amp1, amp2, int, cor, unw, coherence_mask
-    GEOMETRY/                      flat/local incidence
-```
-
-Source IDs, dates, units, transforms, cleaning metadata and input lineage belong
-with the relevant products. New derived arrays record validated dataset-local
-CRS/transform/spacing, local product identity, exact input path and
-`resampling_method=none`: no new warp occurs during derivation, though the input
-may already have been resampled. Every derived dataset in the 3.3.0 archives
-carries these fields; the 375 3.0.0 datasets that lacked them were replaced.
-
-[Build provenance](../build_provenance.py) records forward source identities and
-processing stages; it cannot reconstruct unknown historical commands or software.
-The Grand Mesa viewer-only source-description correction preserves prior text
-and has separate provenance, without changing numeric arrays. Per-file hashes
-verify bytes; array audits and synthetic tests verify particular contracts.
-Neither establishes measurement accuracy or scientific fitness.
-
-## 7. Validation and remaining review
-
-### 3.3.0 rebuild checks
-
-The enrichment ran as one Slurm job per site on Borah
-([scripts/borah](../scripts/borah/)), reading the verified base files through
-symlinks in a staging folder so no job could write into the archive directory.
-Each job recorded the base file's size and modification time before and after.
-
-- **Environment:** created fresh from `environment.yml`; the install exposed a
-  missing `pandas` dependency, since added. 384 of 393 offline Python tests pass
-  there; the other nine need Node.js, which runs the page checks locally.
-- **Enrichment invariants:** `verify_enriched.py` passed 3,088 checks across the
-  eight sites (Grand Mesa 851). Every base file was unchanged.
-- **Aspect:** independently re-derived, as in §4.
-- **Explorer export:** layer counts are identical to the previous explorers at
-  every site (1,664 in total). All 856 sampled display cells matched values
-  recomputed from the archive within one quantisation step. Node page checks
-  passed for all eight explorers and the index; viewer code is unchanged.
-- **Reproduction:** `get_dataset.py` rebuilt Cameron Pass from NASA into an
-  empty folder; all 259 datasets matched the published files (111 bit-identical,
-  148 within 1e-4 relative after a GDAL upgrade).
-- **Independent audit:** `audit_archive.py` reads every array of all sixteen
-  files. Nineteen unwrapped-phase layers are empty because the provider filled
-  pairs it could not unwrap with zero, which enrichment masks; enrichment now
-  records that reason and the audit verifies it.
-- **Swap:** each enriched file was copied into the archive directory and renamed
-  over its predecessor only after its SHA-256 matched the staged candidate. New
-  manifests were then written and checked with `sha256sum -c`.
-
-The [rebuild record](reviews/2026-10-05-archive-rebuild-3.3.0.md) lists the
-per-site results and the layer-by-layer differences from 3.0.0. In short, only
-aspect (median 72–89° at every site), flat and local incidence (under 1°), and
-a few edge cells of canopy fraction and slope changed. Snow depth, vegetation
-height, elevation and all radar channels are unchanged.
-
-### Accepted limitations for v1.0.05
-
-These are documented rather than resolved. None changes the stored values; each
-limits how they may be interpreted.
-
-- **Radar geometry is approximate.** Aircraft altitude reference, time-resolved
-  navigation and terrain/aircraft height compatibility are unverified, and no
-  terrain occlusion is modelled. Incidence ≥90° is an angle condition, not a
-  shadow mask.
-- **Vertical references differ.** Six QSI sites are NAVD88/GEOID12b, Grand Mesa
-  is WGS84 ellipsoidal and the Reynolds Creek reference is unresolved; no
-  vertical conversion is applied.
-- **Grand Mesa 2020 snow depth** has an unresolved catalog date (February 1 vs
-  1–2) and native spacing.
-- **Label uncertainty is not established.** There are only ten independent
-  snow-on LiDAR dates archive-wide; Reynolds Creek has none.
-- **Historical lineage is incomplete.** Forward provenance is recorded for 3.3.0;
-  the base archives' exact build commands cannot be reconstructed.
-- **Grand Mesa's measured SWE and snow density are not in the archive.** The
-  builder specifies two SnowEx20 IOP rasters (lidar + GPR, 1 m, covering ~6% of
-  the site), but they were added after the Grand Mesa base file was built. The
-  audit reports them as a known omission; they are the natural first addition
-  to a later release.
-- **Rebuilding relies on ASF's original product URLs.** ASF reorganised UAVSAR
-  in 2026: the zipped products this archive used no longer appear in ASF search,
-  though their recorded URLs still redirect to the files. `get_dataset.py`
-  therefore downloads from a frozen inventory rebuilt from the archives' own
-  records (`snowex_inventory.json`); fresh discovery currently finds no UAVSAR
-  until the builder supports ASF's new per-file layout.
-
-Deferred to later work: incoming ASO packages (SNEX-015–017), an exhaustive
-per-granule appendix, and broader cross-browser and accessibility acceptance.
+Processing details, the mathematics behind every product, validation and the
+accepted limitations are in the [technical reference](technical-reference.md).
