@@ -15,7 +15,7 @@ Cryosphere, Geophysics and Remote Sensing research lab, Boise State University.
 Release **v1.0.05** · enrichment 3.3.0 · MIT licensed.
 
 [Viewer](#viewer) · [Get the archive](#get-the-archive) ·
-[Status](#status)
+[Status](#status) · [Model results](#model-results)
 
 ## Viewer
 
@@ -197,15 +197,8 @@ and building a viewer from an existing archive.
 
 ## Status
 
-**v1.0.05, released 2026-10-08.** All eight sites were re-enriched to version
-3.3.0 from the unchanged, checksum-verified base archives: aspect now
-points downhill (it was reflected north–south), terrain and canopy derivatives
-use the cleaned inputs, radar viewing geometry uses the projected flight
-heading, and every derived dataset carries its grid and lineage metadata. The
-explorers were exported from the corrected archives. Only aspect, the two
-incidence layers and a few canopy/slope edge cells changed; snow depth,
-vegetation height, elevation and all radar channels are unchanged. See the
-[release notes](CHANGELOG.md).
+**v1.0.05, released 2026-10-08:** all eight sites re-enriched to version 3.3.0
+and the explorers exported from them. See the [release notes](CHANGELOG.md).
 
 ### Known limitations
 
@@ -221,18 +214,26 @@ vegetation height, elevation and all radar channels are unchanged. See the
 The full list, with the reasoning behind each, is in the
 [technical reference](docs/technical-reference.md#accepted-limitations-for-v1005).
 
-### Longer-term research
+## Model results
 
-- Snow-depth modeling evaluated across held-out sites and later years.
-- Density estimation and an eventual SWE product, with independent evaluation
-  and explicit uncertainty and provenance.
-- NISAR ingestion and visualization at substantially larger scales.
+### [Open the model results →](https://anantgahlaut.github.io/cryogars-atlas-results/)
 
-These are future research directions, not capabilities claimed by this release.
-Browser comparison of a user-supplied prediction is already supported; a
-validated retrieval model is not included.
+The archive is the training and test data for snow-depth models. The first
+baselines, random forest and gradient boosting, predict LiDAR snow depth from
+terrain, vegetation and UAVSAR features. Each is tested on a site it never saw
+during training (leave-one-site-out), at block sizes from 3 m to 99 m.
 
-### Documentation and attribution
+On unseen sites, mean R² falls from −0.1 at 3 m to −0.5 at 99 m, while a random
+pixel split scores 0.54 to 0.78. The models beat predicting the training sites'
+average depth by only about 12% in RMSE: they capture part of the spatial
+pattern but miss each site's overall depth, and terrain explains far more than
+radar. The results site has the
+predictions, error maps, feature importance and every training run; the code is in
+the [results repository](https://github.com/AnantGahlaut/cryogars-atlas-results).
+
+No model in this release is a validated snow-depth or SWE retrieval.
+
+## Documentation and attribution
 
 [Documentation index](docs/README.md) ·
 [Design document](docs/design.md) ·
@@ -241,8 +242,7 @@ validated retrieval model is not included.
 [Scientific notes](docs/scientific-notes.md) ·
 [Data sources](docs/data-sources.md) ·
 [Workflow guide](docs/workflows.md) ·
-[Release notes](CHANGELOG.md) ·
-[Release checklist](docs/release-checklist.md)
+[Release notes](CHANGELOG.md)
 
 Observations are provided by the NASA SnowEx community, NASA/JPL UAVSAR, and
 the NSIDC, ASF, and ORNL archives. Cite the original datasets and identify the
@@ -250,6 +250,8 @@ site, dates, subset, and processing version used in your analysis.
 
 **Code license: [MIT](LICENSE).** Cite this software with
 [CITATION.cff](CITATION.cff). Source datasets retain their own attribution and use
-requirements. Developed in the CryoGARS lab with HP Marshall. The development repository,
-[viewer distribution](https://github.com/AnantGahlaut/cryogars-atlas-viewer) and
-[hosted Atlas](https://anantgahlaut.github.io/cryogars-atlas-viewer/) are public.
+requirements. Developed in the CryoGARS lab with HP Marshall. The
+[source repository](https://github.com/cryogars/cryogars-atlas),
+[viewer distribution](https://github.com/AnantGahlaut/cryogars-atlas-viewer),
+[hosted Atlas](https://anantgahlaut.github.io/cryogars-atlas-viewer/) and
+[model results](https://anantgahlaut.github.io/cryogars-atlas-results/) are public.

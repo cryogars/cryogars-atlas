@@ -14,7 +14,7 @@ contact:
   - given-names: Hans-Peter
     family-names: Marshall
     affiliation: "CryoGARS, Boise State University"
-repository-code: "https://github.com/AnantGahlaut/cryogars-atlas"
+repository-code: "https://github.com/cryogars/cryogars-atlas"
 url: "https://anantgahlaut.github.io/cryogars-atlas-viewer/"
 license: MIT
 keywords:

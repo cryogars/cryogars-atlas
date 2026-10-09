@@ -14,8 +14,7 @@ an enriched file (enrichment 3.3.0) per site.
 ## 2. Sites and data inventory
 
 8 sites have overlapping LiDAR + UAVSAR coverage, found by intersecting each
-LiDAR granule's real footprint polygon with UAVSAR's catalog — not by matching
-site names to campaign names, which turned out to be unreliable. A UAVSAR pair
+LiDAR granule's real footprint polygon with UAVSAR's catalog. A UAVSAR pair
 counts as a match when it overlaps the footprint and comes within 5 days of the
 LiDAR survey.
 
@@ -55,14 +54,14 @@ holds 286 million cells.
 
 | Step | Action |
 | --- | --- |
-| 1. Plan | Read the frozen product inventory and the LIDAR/UAVSAR match list; group by unique UAVSAR product so a shared flight is downloaded once, not once per site. |
+| 1. Plan | Read the frozen product inventory and the LIDAR/UAVSAR match list; group by unique UAVSAR product so a shared flight is downloaded once. |
 | 2. Grid + LIDAR | Derive the site's common grid from its reference DEM (3.2); read each DEM/SD/VH product, resample it onto the grid (3.4) and write it into the site's .h5. |
-| 3. Fetch UAVSAR | Download each unique product once, by its recorded product URL (found via footprint search — no campaign names). |
+| 3. Fetch UAVSAR | Download each unique product once, by its recorded product URL (found via footprint search). |
 | 4. Reproject + clip | Resample onto the common grid of every site sharing that product (3.2, 3.4), reading only the site's extent plus a 500 m buffer. |
-| 5. Write | Stream the clipped, aligned arrays straight into each site's .h5 — no intermediate files on disk. |
+| 5. Write | Stream the clipped, aligned arrays straight into each site's .h5. |
 | 6. Clean up | Delete the raw UAVSAR download once every site needing it has been written. |
 | 7. Finalize | Write `identification/` and `matches/`; verify every array's shape + transform matches the site's common grid before marking the file complete. |
-| 8. Enrich | Write `<site>.enriched.h5` (never edit in place): clean the layers, regroup radar by acquisition, add slope, aspect, canopy fraction, coherence masks and incidence angles (4). |
+| 8. Enrich | Write `<site>.enriched.h5`: clean the layers, regroup radar by acquisition, add slope, aspect, canopy fraction, coherence masks and incidence angles (4). |
 | 9. Verify | Re-check the enrichment from the stored values, audit every file independently, and write SHA-256 manifests. |
 
 ### 3.1 One download per flight, shared across sites
@@ -78,13 +77,12 @@ holds 286 million cells.
   affine transform, one pixel shape. The CRS, 3 m pixel size and pixel alignment
   come from the site's reference LiDAR DEM; the grid extent is where that DEM and
   the site's science data overlap.
-- Stronger than “same projection”: the same row and column are the same ground
+- The same row and column are the same ground
   location in every layer, checked programmatically on every array before a file
   is marked complete.
 
 Grand Mesa has no QSI DEM. Its reference is the 2016 lidar-derived snow-off DTM
-from the SnowEx HRSI collection (1 m, resampled to 3 m, EPSG:32612) — older than
-the 2017 and 2020 snow surveys it supports, and recorded as such.
+from the SnowEx HRSI collection (1 m, resampled to 3 m, EPSG:32612).
 
 Reynolds Creek has no snow-depth survey in the SnowEx collections. Its reference
 is the 2014 Reynolds Creek Experimental Watershed lidar DEM (1 m, resampled to
@@ -96,15 +94,11 @@ snow-depth labels.
 - LIDAR: QSI and ASO products are published at 3 m; Grand Mesa's DTM and Reynolds
   Creek's DEM are 1 m and are resampled to 3 m. UAVSAR: about 4.45 m × 6.18 m on
   the ground (non-square), recorded per product.
-- The 3 m LIDAR grid is the common grid; UAVSAR is upsampled onto it. This
-  resamples a coarser measurement onto a finer bookkeeping grid — it does not
-  invent new detail — and UAVSAR's true resolution is stored as
-  `uavsar_native_resolution_m` so it is never mistaken for a native 3 m
-  measurement.
+- The 3 m LIDAR grid is the common grid; UAVSAR is upsampled onto it, and its native resolution is stored as
+  `uavsar_native_resolution_m`.
 
-Upsampling was kept over downsampling LIDAR to the radar grid: it preserves the
-LIDAR labels at full resolution, and models can still average to coarser blocks
-when training.
+This keeps the LIDAR labels at full resolution; models can average to coarser
+blocks when training.
 
 ### 3.4 Resampling method
 
@@ -115,7 +109,7 @@ when training.
 ### 3.5 Naming, documentation, and NISAR alignment
 
 - In the base file, UAVSAR groups are named by site, source flight line and
-  dates, not JPL's opaque product ID:
+  dates:
 
   ```text
   BANNERSUMMIT_CUTFROMLOWMAN23205_20200131_20200213
@@ -125,11 +119,9 @@ when training.
   `UAVSAR/<date1>_<date2>/<flight line>/` — with amplitude and interferometry
   together, since they come from the same pair of passes; the base group name is
   kept as `original_group_name`.
-- Original JPL product ID and ASF file ID kept as attributes for traceability,
-  not used as group names.
+- Original JPL product ID and ASF file ID kept as attributes for traceability.
 - Every group and array carries a plain-English `description` attribute plus
-  units, grid and source lineage — readable without outside context or SAR
-  background.
+  units, grid and source lineage.
 - The overall structure (science data under `science/`, file-level metadata in a
   separate `identification/` group) follows the layout NASA uses in NISAR HDF5
   products.
