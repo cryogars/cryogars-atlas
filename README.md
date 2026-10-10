@@ -17,6 +17,9 @@ Release **v1.0.05** · enrichment 3.3.0 · MIT licensed.
 [Viewer](#viewer) · [Get the archive](#get-the-archive) ·
 [Status](#status) · [Model results](#model-results)
 
+**[Open the 3D Atlas →](https://anantgahlaut.github.io/cryogars-atlas-viewer/)** ·
+**[Open the model results →](https://anantgahlaut.github.io/cryogars-atlas-results/)**
+
 ## Viewer
 
 ### [Open the 3D Atlas →](https://anantgahlaut.github.io/cryogars-atlas-viewer/)
@@ -25,10 +28,16 @@ Choose a site and open its explorer. No sign-in, Python installation, or HDF5
 download is required. Use a modern WebGL-capable browser; desktop viewing is
 recommended.
 
-![Banner Summit's LiDAR-derived terrain in the live 3D explorer](assets/screenshots/banner-summit-terrain.jpg)
+![The SnowEx Field Atlas home page with Grand Mesa selected in the site directory](assets/screenshots/home-grand-mesa.jpg)
 
-*Banner Summit elevation, displayed on the existing 3D terrain mesh. The data
-tree, colour legend, and comparison controls remain available beside the map.*
+*The Atlas home page with Grand Mesa selected: the site directory, a rotating
+elevation preview, and the link to that site's 3D explorer.*
+
+![Banner Summit's LiDAR-derived terrain in the live 3D explorer](assets/screenshots/banner-summit-elevation.jpg)
+
+*Banner Summit elevation in the 3D explorer, with a 2nd–98th percentile colour
+stretch. The data tree, colour legend, and comparison controls remain available
+beside the map.*
 
 ### What it does
 
@@ -52,12 +61,21 @@ tree, colour legend, and comparison controls remain available beside the map.*
 Imported GeoTIFFs and comparison results stay in the visitor's browser. They
 are not uploaded or added to the permanent archive.
 
-![Snow-depth difference displayed in 3D with A, B, difference, colour, and PNG export controls](assets/screenshots/snow-depth-comparison.jpg)
+![Banner Summit LiDAR snow depth draped on the 3D terrain](assets/screenshots/banner-summit-snow-depth.jpg)
 
-*An actual browser comparison at Banner Summit: B = 2021-03-15 snow depth,
-A = 2020-02-18 snow depth. The screenshot uses a robust 2nd–98th percentile
-colour stretch with symmetric difference limits. This illustrates differences
-between two surveys, not model accuracy.*
+*Banner Summit LiDAR snow depth, 2021-03-15, with a 2nd–98th percentile colour
+stretch.*
+
+![Model prediction minus LiDAR snow depth displayed in 3D with A, B, difference, colour, and PNG export controls](assets/screenshots/banner-summit-random-forest-minus-lidar.jpg)
+
+*An actual browser comparison at Banner Summit: A = LiDAR snow depth on
+2021-03-15; B = the snow-depth prediction from the 30 m random forest benchmark,
+imported as a GeoTIFF. The model never saw Banner Summit during training. Blue
+is where the model predicts more snow than the LiDAR measured, red is less. The
+screenshot uses a robust 2nd–98th percentile colour stretch with symmetric
+difference limits. This is an exploratory comparison on the explorer's 24 m
+display grid, not the formal evaluation.
+**More details: [model results →](https://anantgahlaut.github.io/cryogars-atlas-results/)***
 
 ### How it works
 
@@ -230,6 +248,15 @@ pattern but miss each site's overall depth, and terrain explains far more than
 radar. The results site has the
 predictions, error maps, feature importance and every training run; the code is in
 the [results repository](https://github.com/AnantGahlaut/cryogars-atlas-results).
+
+![Prediction error at Cameron Pass in the model results 3D viewer](assets/screenshots/cameron-pass-prediction-error.jpg)
+
+*Cameron Pass in the model results viewer: prediction error (model − LiDAR snow
+depth) for 2021-03-19 from the 30 m gradient boosting model, trained on the
+other six sites. Blue is where the model predicts more snow than the LiDAR
+measured, red is less; the colour stretch is symmetric from the 2nd–98th
+percentiles. At this site the RMSE is 0.39 m, the bias −0.07 m and the
+correlation 0.54.*
 
 No model in this release is a validated snow-depth or SWE retrieval.
 
