@@ -137,23 +137,35 @@ The full-resolution analysis archive is separate from the browser viewer and
 this source repository. It contains per-site HDF5 files with aligned LiDAR and
 UAVSAR products, a common 3 m grid, temporal match tables, and processing metadata.
 
-Rather than host about 290 GB, the repository rebuilds the archive from the
-original NASA products into any folder you choose:
+This is how you download the archive. It is around 300 GB. One script downloads
+the original NASA products and builds the archive in a folder you choose:
 
 ```bash
+# 1. Set up the Python environment (once).
 conda env create -f environment.yml && conda activate snowex-atlas
-python get_dataset.py --dest /path/to/snowex --plan      # sizes only
-python get_dataset.py --dest /path/to/snowex             # all eight sites
-python get_dataset.py --dest /path/to/snowex --sites cameron_pass
+
+# 2. Run the tests.
+python -m unittest discover -s tests -t .     # pipeline tests
+node --test tests/web/test_*.js               # viewer tests (Node 22)
+
+# 3. Print the disk space each site needs. Nothing is downloaded.
+python get_dataset.py --dest /path/to/snowex --plan
+
+# 4. Download and build. For each site the script:
+#      downloads the LiDAR and UAVSAR products from NASA,
+#      aligns them on the site's 3 m grid          -> <site>.h5
+#      cleans them and adds the derived layers     -> <site>.enriched.h5
+#      checks the result and writes SHA-256 checksums.
+#    If a run is interrupted, run the same command again and it resumes.
+python get_dataset.py --dest /path/to/snowex                        # all eight sites
+python get_dataset.py --dest /path/to/snowex --sites cameron_pass   # one site
 ```
 
 It needs a free [NASA Earthdata login](https://urs.earthdata.nasa.gov/) in
-`~/.netrc` (Windows: `~/_netrc`). It downloads the exact granules recorded in the
-v1.0.05 archive (`snowex_inventory.json`), builds `<site>.h5`, enriches it to
-`<site>.enriched.h5`, re-verifies the enrichment and writes SHA-256 manifests.
-Interrupted runs resume. Rebuilt files match the published archive dataset by
-dataset; they are not byte-identical, because HDF5 records creation times and
-software versions.
+`~/.netrc` (Windows: `~/_netrc`). It downloads the exact products recorded in the
+v1.0.05 archive (`snowex_inventory.json`). Rebuilt files match the published
+archive dataset by dataset; they are not byte-identical, because HDF5 records
+creation times and software versions.
 
 Grand Mesa alone is about 220 GB; `--plan` reports the space each site needs.
 
