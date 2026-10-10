@@ -2,7 +2,7 @@
 """
 get_dataset.py -- download the SnowEx sources and build the archive anywhere.
 
-The archive is not hosted as a download (it is around 300 GB). This script rebuilds it from
+The archive is not hosted as a download (it is 289 GB). This script rebuilds it from
 the original NASA products instead, into a folder you choose:
 
     python get_dataset.py --dest /path/to/snowex                  # all 8 sites

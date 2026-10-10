@@ -83,8 +83,7 @@ display grid, not the formal evaluation.
    accepted rasters onto each site's 3 m DEM reference grid and stores the
    aligned layers, coordinates, dates, and metadata in HDF5. The same row and
    column represent the same mapped location across aligned raster layers.
-2. **Create a browser-sized export.** The exporter samples and quantizes display
-   arrays, then embeds them with the application in a self-contained HTML page.
+2. **Create a browser-sized export.** The exporter averages each array into display-sized blocks and quantizes them, then embeds them with the application in a self-contained HTML page.
    The browser does not read or download the full HDF5 archive.
 3. **Render and compare locally.** WebGL draws a DEM-based terrain mesh and
    colours it with the selected product. Automatic terrain detail adapts the
@@ -103,7 +102,7 @@ Use the full archive for quantitative modeling. Read the
 [comparison guide and limitations](docs/BROWSER_COMPARISON.md) and
 [scientific notes](docs/scientific-notes.md) before interpreting differences.
 
-The eight explorer pages total approximately **114 MiB**; larger sites can take
+The eight explorer pages total approximately **113.5 MiB**; larger sites can take
 longer to load. Application code and display data are embedded. Optional Google
 Fonts have local fallbacks.
 
@@ -137,7 +136,7 @@ The full-resolution analysis archive is separate from the browser viewer and
 this source repository. It contains per-site HDF5 files with aligned LiDAR and
 UAVSAR products, a common 3 m grid, temporal match tables, and processing metadata.
 
-This is how you download the archive. It is around 300 GB. One script downloads
+This is how you download the archive. The 16 finished files total 289 GB. One script downloads
 the original NASA products and builds the archive in a folder you choose:
 
 ```bash
@@ -148,7 +147,7 @@ conda env create -f environment.yml && conda activate snowex-atlas
 python -m unittest discover -s tests -t .     # pipeline tests
 node --test tests/web/test_*.js               # viewer tests (Node 22)
 
-# 3. Print the disk space each site needs. Nothing is downloaded.
+# 3. Print the total disk space the chosen sites need. Nothing is downloaded.
 python get_dataset.py --dest /path/to/snowex --plan
 
 # 4. Download and build. For each site the script:
@@ -163,11 +162,9 @@ python get_dataset.py --dest /path/to/snowex --sites cameron_pass   # one site
 
 It needs a free [NASA Earthdata login](https://urs.earthdata.nasa.gov/) in
 `~/.netrc` (Windows: `~/_netrc`). It downloads the exact products recorded in the
-v1.0.05 archive (`snowex_inventory.json`). Rebuilt files match the published
-archive dataset by dataset; they are not byte-identical, because HDF5 records
-creation times and software versions.
+v1.0.05 archive (`snowex_inventory.json`). A test rebuild of Cameron Pass matched the published files dataset by dataset (same shapes, types and valid-cell counts, values within 1e-4 relative). Rebuilt files are not byte-identical, because HDF5 records creation times and software versions.
 
-Grand Mesa alone is about 220 GB; `--plan` reports the space each site needs.
+The script asks for about 314 GB of free space for all eight sites, which includes 25 GB of working space for downloads. Grand Mesa alone is 222 GB; `--plan --sites grand_mesa` prints the space for that site.
 
 ### What is inside
 
@@ -184,7 +181,7 @@ and processed; `<site>.enriched.h5` files contain the enrichment stage. Neither
 should be described as untouched sensor data.
 
 <details>
-<summary>HDF5 layout and a small Python example</summary>
+<summary>HDF5 layout of an enriched file and a small Python example</summary>
 
 ```text
 identification/                       site, grid, and processing metadata
@@ -234,12 +231,14 @@ and the explorers exported from them. See the [release notes](CHANGELOG.md).
 
 | Area | Limitation |
 | --- | --- |
-| Labels | Only ten independent snow-on LiDAR dates archive-wide; Reynolds Creek has none. Label uncertainty is not established. |
+| Labels | Snow depth exists for 15 site-surveys at seven sites, from 11 site-winters; five are Grand Mesa in February 2017. Reynolds Creek has none. Label uncertainty is not established. |
 | Radar geometry | Incidence is approximate: straight-track, constant-altitude platform; navigation and height compatibility unverified; no terrain occlusion. |
 | Vertical reference | Six sites NAVD88/GEOID12b, Grand Mesa WGS84 ellipsoidal, Reynolds Creek unresolved; no conversion is applied. |
-| Grand Mesa SWE/density | Two measured IOP rasters specified by the builder are not in this release. |
-| Rebuilding | `get_dataset.py` depends on ASF's original UAVSAR URLs, which still redirect after ASF's 2026 reorganisation; fresh catalogue discovery needs a builder update. |
-| Incoming ASO data | Deferred; georeferencing, date, duplicate and SWE-lineage issues must be resolved before ingestion. |
+| Grand Mesa SWE/density | The builder lists two measured Grand Mesa rasters at 1 m, snow water equivalent and snow density. Neither is in this release. |
+| Grand Mesa 2020 snow depth | Covers 2.3% of the site grid. |
+| Grand Mesa canopy | Vegetation height and canopy fraction exist only for 2020. The five 2017 snow-depth surveys have no same-year canopy layer. |
+| Unwrapped phase | 19 unwrapped-phase layers are empty. The provider stored zeros where unwrapping failed, and enrichment masks them. |
+| Rebuilding | `get_dataset.py` depends on ASF's original UAVSAR URLs, which still redirected on 2026-10-08, after ASF's 2026 reorganisation; fresh catalogue discovery needs a builder update. |
 
 The full list, with the reasoning behind each, is in the
 [technical reference](docs/technical-reference.md#accepted-limitations-for-v1005).
@@ -253,7 +252,7 @@ baselines, random forest and gradient boosting, predict LiDAR snow depth from
 terrain, vegetation and UAVSAR features. Each is tested on a site it never saw
 during training (leave-one-site-out), at block sizes from 3 m to 99 m.
 
-On unseen sites, mean R² falls from −0.1 at 3 m to −0.5 at 99 m, while a random
+On unseen sites, mean R² falls from about −0.1 at 3 m to between −0.4 and −0.5 at 99 m, while a random
 pixel split scores 0.54 to 0.78. The models beat predicting the training sites'
 average depth by only about 12% in RMSE: they capture part of the spatial
 pattern but miss each site's overall depth, and terrain explains far more than
@@ -267,7 +266,7 @@ the [results repository](https://github.com/AnantGahlaut/cryogars-atlas-results)
 depth) for 2021-03-19 from the 30 m gradient boosting model, trained on the
 other six sites. Blue is where the model predicts more snow than the LiDAR
 measured, red is less; the colour stretch is symmetric from the 2nd–98th
-percentiles. At this site the RMSE is 0.39 m, the bias −0.07 m and the
+percentiles. Over the 23,528 mapped blocks the RMSE is 0.39 m, the bias −0.07 m and the
 correlation 0.54.*
 
 No model in this release is a validated snow-depth or SWE retrieval.

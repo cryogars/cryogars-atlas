@@ -343,14 +343,17 @@ limits how they may be interpreted.
   is WGS84 ellipsoidal and the Reynolds Creek reference is unresolved; no
   vertical conversion is applied.
 - **Grand Mesa 2020 snow depth** has an unresolved catalog date (February 1 vs
-  1–2) and native spacing.
-- **Label uncertainty is not established.** There are only ten independent
-  snow-on LiDAR dates archive-wide; Reynolds Creek has none.
+  1–2) and native spacing. It covers 2.3% of the site grid.
+- **Grand Mesa canopy is from 2020 only.** Vegetation height and canopy
+  fraction exist for 2020-02-01 and 2020-02-13. The five 2017 snow-depth
+  surveys have no same-year canopy layer.
+- **19 unwrapped-phase layers are empty** (Banner Summit 6, Little Cottonwood 9,
+  Cameron Pass 2, Dry Creek 2). The provider stored zeros where unwrapping
+  failed; enrichment masks them and records `empty_reason=unwrapper_zero_fill`. Three further pairs (Banner Summit and Mores Creek 2020-01-31 to 02-13, Cameron Pass 2021-03-10 to 03-22 on line 14107) have no unwrapped-phase layer, and one Grand Mesa pair (2017-02-22 to 02-25, line 26006) has amplitude only.
+- **Label uncertainty is not established.** Snow depth exists for 15 site-surveys from 11 site-winters at seven sites; Reynolds Creek has none.
 - **Historical lineage is incomplete.** Forward provenance is recorded for 3.3.0;
   the base archives' exact build commands cannot be reconstructed.
-- **Grand Mesa's measured SWE and snow density are not in the archive.** The
-  builder specifies two SnowEx20 IOP rasters (lidar + GPR, 1 m, covering ~6% of
-  the site), but they were added after the Grand Mesa base file was built. The
+- **Grand Mesa's measured SWE and snow density are not in the archive.** The builder specifies two SnowEx20 IOP rasters (lidar + GPR, 1 m, covering a small study plot), and the Grand Mesa base file does not contain them. The
   audit reports them as a known omission; they are the natural first addition
   to a later release.
 - **Rebuilding relies on ASF's original product URLs.** ASF reorganised UAVSAR
@@ -360,5 +363,4 @@ limits how they may be interpreted.
   records (`snowex_inventory.json`); fresh discovery currently finds no UAVSAR
   until the builder supports ASF's new per-file layout.
 
-Deferred to later work: incoming ASO packages (SNEX-015–017), an exhaustive
-per-granule appendix, and broader cross-browser and accessibility acceptance.
+Deferred to later work: an exhaustive per-granule appendix, and broader cross-browser and accessibility acceptance.

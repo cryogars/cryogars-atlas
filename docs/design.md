@@ -27,12 +27,12 @@ LiDAR survey.
 | Cameron Pass | CO | DEM, SD, VH | yes, 5 acquisitions | |
 | Little Cottonwood Cyn | UT | DEM, SD, VH | yes, 6 acquisitions | |
 | Grand Mesa | CO | DEM, SD (6 dates), VH (2 dates) | yes, 27 acquisitions | DEM is a 2016 lidar snow-off DTM (1 m); SD from 5 ASO surveys (2017) + SnowEx 2020 |
-| Reynolds Creek | ID | DEM, VH | yes, 1 acquisition | DEM is the 2014 RCEW lidar DEM (1 m); no snow-depth survey exists |
+| Reynolds Creek | ID | DEM, VH | yes, 1 acquisition | DEM is the 2014 RCEW lidar DEM (1 m); no snow-depth survey is in the archive |
 
 ### 2.1 Data volume (final archive)
 
-Sizes of the released v1.0.05 files. The archive is larger than the downloaded
-radar products (about 172 GB before clipping) because every layer is stored on
+Sizes of the released v1.0.05 files, in decimal GB. The archive is larger than the downloaded
+radar products (about 198 GB before clipping) because every layer is stored on
 the 3 m grid, finer than UAVSAR's native pixels, and Grand Mesa's grid alone
 holds 286 million cells.
 
@@ -50,41 +50,36 @@ holds 286 million cells.
 
 ## 3. Pipeline design
 
-### 3.0 What the main script does, end to end
+### 3.0 What the pipeline does, end to end
 
 | Step | Action |
 | --- | --- |
-| 1. Plan | Read the frozen product inventory and the LIDAR/UAVSAR match list; group by unique UAVSAR product so a shared flight is downloaded once. |
-| 2. Grid + LIDAR | Derive the site's common grid from its reference DEM (3.2); read each DEM/SD/VH product, resample it onto the grid (3.4) and write it into the site's .h5. |
+| 1. Plan | Read the frozen product inventory and the LIDAR/UAVSAR match list; group by unique UAVSAR product so sites built in the same run download a shared flight once. |
+| 2. Grid + LIDAR | Derive the site's common grid from its reference DEM (3.2); write `identification/`, resample each DEM/SD/VH product onto the grid (3.4), write it into the site's .h5, then write `matches/`. |
 | 3. Fetch UAVSAR | Download each unique product once, by its recorded product URL (found via footprint search). |
-| 4. Reproject + clip | Resample onto the common grid of every site sharing that product (3.2, 3.4), reading only the site's extent plus a 500 m buffer. |
+| 4. Reproject + clip | Resample onto the common grid of every site sharing that product (3.2, 3.4), reading only the site's extent plus an 8-pixel margin of the source raster. |
 | 5. Write | Stream the clipped, aligned arrays straight into each site's .h5. |
 | 6. Clean up | Delete the raw UAVSAR download once every site needing it has been written. |
-| 7. Finalize | Write `identification/` and `matches/`; verify every array's shape + transform matches the site's common grid before marking the file complete. |
+| 7. Check | `--mode verify` reopens a file and checks every array's shape, transform and CRS against the site's common grid. |
 | 8. Enrich | Write `<site>.enriched.h5`: clean the layers, regroup radar by acquisition, add slope, aspect, canopy fraction, coherence masks and incidence angles (4). |
 | 9. Verify | Re-check the enrichment from the stored values, audit every file independently, and write SHA-256 manifests. |
 
 ### 3.1 One download per flight, shared across sites
 
-- Banner Summit, Dry Creek and Mores Creek are covered by the same UAVSAR flight
-  lines (Lowman lines 05208 and 23205).
+- Banner Summit, Dry Creek and Mores Creek share UAVSAR flights on Lowman line 23205; Banner Summit and Mores Creek also share line 05208.
 - Each unique product is downloaded once, clipped separately for every
   overlapping site, then the raw file is deleted.
 
 ### 3.2 Common grid per site
 
 - Every array in a site's file (LIDAR and UAVSAR alike) shares one CRS, one
-  affine transform, one pixel shape. The CRS, 3 m pixel size and pixel alignment
-  come from the site's reference LiDAR DEM; the grid extent is where that DEM and
-  the site's science data overlap.
-- The same row and column are the same ground
-  location in every layer, checked programmatically on every array before a file
-  is marked complete.
+  affine transform, one pixel shape. The CRS and pixel alignment come from the site's reference LiDAR DEM, the pixel size is fixed at 3 m, and the grid extent is where that DEM and the site's science data overlap.
+- The same row and column are the same ground location in every layer; the verify and audit steps check every array's shape, transform and CRS against the grid.
 
-Grand Mesa has no QSI DEM. Its reference is the 2016 lidar-derived snow-off DTM
+Grand Mesa's reference is the 2016 lidar-derived snow-off DTM
 from the SnowEx HRSI collection (1 m, resampled to 3 m, EPSG:32612).
 
-Reynolds Creek has no snow-depth survey in the SnowEx collections. Its reference
+Reynolds Creek has no snow-depth survey in the archive. Its reference
 is the 2014 Reynolds Creek Experimental Watershed lidar DEM (1 m, resampled to
 3 m, EPSG:26911), so the site carries terrain, vegetation and radar but no
 snow-depth labels.
@@ -92,8 +87,7 @@ snow-depth labels.
 ### 3.3 Resolution
 
 - LIDAR: QSI and ASO products are published at 3 m; Grand Mesa's DTM and Reynolds
-  Creek's DEM are 1 m and are resampled to 3 m. UAVSAR: about 4.45 m × 6.18 m on
-  the ground (non-square), recorded per product.
+  Creek's DEM are 1 m and are resampled to 3 m. UAVSAR: 0.00005556° pixels, about 4.5 m × 6.2 m on the ground in Idaho and 4.8 m × 6.2 m in Colorado and Utah (non-square); every file records the nominal 4.45 m × 6.18 m.
 - The 3 m LIDAR grid is the common grid; UAVSAR is upsampled onto it, and its native resolution is stored as
   `uavsar_native_resolution_m`.
 
@@ -120,18 +114,16 @@ blocks when training.
   together, since they come from the same pair of passes; the base group name is
   kept as `original_group_name`.
 - Original JPL product ID and ASF file ID kept as attributes for traceability.
-- Every group and array carries a plain-English `description` attribute plus
-  units, grid and source lineage.
+- Every science array carries a plain-English `description` attribute plus its
+  grid and source lineage; derived layers also carry `units`.
 - The overall structure (science data under `science/`, file-level metadata in a
-  separate `identification/` group) follows the layout NASA uses in NISAR HDF5
-  products.
+  separate `identification/` group) borrows its group names from NISAR HDF5 products.
 
 ## 4. Full HDF5 schema (v1.0.05)
 
 Shown for Banner Summit's enriched file — 2 SD dates, 2 VH dates, DEM, derived
 layers and 11 UAVSAR acquisitions, on flight lines shared with Dry Creek and
-Mores Creek. The base file (`banner_summit.h5`) holds the same LIDAR arrays and
-stores radar by product type (`INTERFEROMETRY_GRD/`, `AMPLITUDE_GRD/`,
+Mores Creek. The base file (`banner_summit.h5`) holds the same LIDAR layers before enrichment cleaning, snow-pit tables under `insitu/`, and radar by product type (`INTERFEROMETRY_GRD/`, `AMPLITUDE_GRD/`,
 `DEM_TIFF/`). Arrows explain what each item actually is.
 
 ```text
@@ -156,7 +148,7 @@ banner_summit.enriched.h5
 │   │         forest_cover_fraction_20200218, _20210315   → share of nearby cells with vegetation ≥ 2 m
 │   │
 │   └─ UAVSAR/   → data from the airplane-mounted radar — clipped to this site, resampled onto the LIDAR grid
-│         20200131_20200213/LOWMAN23205/   → one acquisition: the Lowman flight line, comparing Jan 31 to Feb 13, 2020
+│         20200213_20200221/LOWMAN23205/   → one acquisition: the Lowman flight line, comparing Feb 13 to Feb 21, 2020
 │           attrs: original_product_id, original_group_name, acquisition_dates,   → traceability: JPL's product ID, the base-file group name and the two real flight dates
 │                  radar_wavelength_cm, radar_look_direction, platform_altitude_m   → radar and flight geometry from JPL's annotation file
 │           HH/  amp1, amp2, int, unw, cor, coherence_mask   → horizontal-send / horizontal-receive antenna combination — 6 arrays (below)
@@ -165,7 +157,7 @@ banner_summit.enriched.h5
 │                • unw = unwrapped phase   → the int value “unrolled” into a continuous number — the usable surface-change signal
 │                • cor = coherence   → 0 to 1, how trustworthy the phase measurement is at that pixel (1 = reliable)
 │                • coherence_mask   → 1 where coherence ≥ 0.30, 0 below, 255 where missing
-│           HV/, VH/, VV/  (same 6)   → the other send/receive combinations, where the flight recorded them
+│           HV/, VH/, VV/  (same arrays)   → the other send/receive combinations, where the flight recorded them; a few pairs have no unw
 │           GEOMETRY/  incidence_angle_flat, local_incidence_angle   → the angle the radar meets the ground, ignoring and including the slope
 │
 └─ matches/   → a table recording which LIDAR date was paired with which UAVSAR acquisition, how many days apart, and whether it counted as a match
